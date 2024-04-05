@@ -8,31 +8,21 @@ import csv
 import logging
 import re
 
-# Server configuration
 HOST = '127.0.0.1'
 PORT = 8000
 
 
 def create_database_and_tables():
-    # Establish a connection to the database (or create it if it doesn't exist)
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
 
-    # Create the 'users' table with columns for client_id, username, password, and balance
     c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (client_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  username TEXT UNIQUE,
-                  password TEXT,
-                  balance REAL DEFAULT 0)''')
-
-    c.execute('''CREATE TABLE IF NOT EXISTS accounts
                  (client_id INTEGER PRIMARY KEY AUTOINCREMENT,
                   username TEXT UNIQUE NOT NULL,
                   password TEXT NOT NULL,
                   balance REAL DEFAULT 0,
                   UNIQUE(username))''')
 
-    # Creating the 'portfolios' table
     c.execute('''CREATE TABLE IF NOT EXISTS portfolios
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   username TEXT NOT NULL,
@@ -51,24 +41,21 @@ def create_database_and_tables():
                   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY (username) REFERENCES users(username))''')
 
-    # Close the connection to the database
     conn.close()
 
 
-# Call the function to create the database and tables
 create_database_and_tables()
 
 
+@contextmanager
 def db_connection(database='users.db'):
     conn = sqlite3.connect(database)
-    cur = conn.cursor()
+    cursor = conn.cursor()
     try:
-        yield cur
+        yield conn, cursor
     except Exception as e:
         conn.rollback()
         raise e
-    else:
-        conn.commit()
     finally:
         conn.close()
 
@@ -107,13 +94,15 @@ def handle_client(conn, addr):
                 elif action == 'invest':
                     username = request[1]
                     market = request[2]
-                    amount = float(request[3])  # Ensure amount is a float
-                    response = invest(username, market, amount)
+                    quantity = int(request[3])
+                    amount = float(request[4])
+                    transaction_type = request[5]
+                    response = invest(username, market,
+                                      quantity, amount, transaction_type)
                     conn.sendall(response.encode())
 
                 elif action == 'withdraw':
                     username = request[1]
-                    # Assuming amount is sent as a string
                     amount = float(request[2])
                     response = withdraw_money(username, amount)
                     conn.sendall(response.encode())
@@ -133,12 +122,12 @@ def deposit(username, amount):
     if amount <= 0:
         return 'Deposit amount must be positive.'
     try:
-        with db_connection() as db:
+        with db_connection() as (conn, db):
             db.execute(
                 "UPDATE users SET balance = balance + ? WHERE username = ?", (amount, username))
+            conn.commit()
             return 'Deposit successful.'
     except Exception as e:
-        # This will catch any errors during the database operation, including issues with the query.
         print(f"An error occurred during the deposit operation: {e}")
         return 'Error processing the deposit.'
 
@@ -169,7 +158,6 @@ def authenticate(username, password):
     conn.close()
     if result:
         client_id = result[0]
-        # Include client_id in the response
         return f'Login successful, Client ID: {client_id}'
     else:
         return 'Login failed'
@@ -182,10 +170,8 @@ def register_user(username, password):
         c.execute("INSERT INTO users (username, password) VALUES (?, ?)",
                   (username, password))
         conn.commit()
-        # Fetch the client_id of the newly registered user
         c.execute("SELECT client_id FROM users WHERE username=?", (username,))
         client_id = c.fetchone()[0]
-        # Include client_id in the response
         return f'Registration successful, Client ID: {client_id}'
     except sqlite3.IntegrityError:
         return 'Username already exists'
@@ -202,51 +188,32 @@ def get_balance(username):
     return balance
 
 
-def invest(username, market, amount):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
+def invest(username, market, quantity, amount, transaction_type):
     try:
-        # Check if the user has enough balance
-        c.execute("SELECT balance FROM users WHERE username = ?", (username,))
-        balance = c.fetchone()[0]
-        if balance >= amount:
-            # Deduct the investment amount from the user's balance
-            c.execute(
-                "UPDATE users SET balance = balance - ? WHERE username = ?", (amount, username))
-
-            # Check if the user already has an existing investment for the given market
-            c.execute(
-                "SELECT amount FROM investments WHERE username=? AND market=?", (username, market))
-            existing_investment = c.fetchone()
-            if existing_investment:
-                new_amount = existing_investment[0] + amount
-                c.execute("UPDATE investments SET amount=? WHERE username=? AND market=?",
-                          (new_amount, username, market))
+        with db_connection() as (conn, cursor):
+            cursor.execute(
+                "SELECT balance FROM users WHERE username = ?", (username,))
+            balance_result = cursor.fetchone()
+            if balance_result and balance_result[0] >= amount:
+                cursor.execute(
+                    "UPDATE users SET balance = balance - ? WHERE username = ?", (amount, username))
+                cursor.execute("INSERT INTO portfolios (username, market, quantity, amount) VALUES (?, ?, ?, ?)",
+                               (username, market, quantity, amount))
+                cursor.execute("INSERT INTO transactions (username, transaction_type, amount, market) VALUES (?, ?, ?, ?)",
+                               (username, transaction_type, amount, market))
+                conn.commit()
+                return 'Investment successful'
             else:
-                c.execute(
-                    "INSERT INTO investments (username, market, amount) VALUES (?, ?, ?)", (username, market, amount))
-
-            # Log the transaction in the transactions table
-            c.execute("INSERT INTO transactions (username, transaction_type, amount, market) VALUES (?, 'invest', ?, ?)",
-                      (username, amount, market))
-            conn.commit()
-            response = 'Investment successful'
-        else:
-            response = 'Insufficient funds'
-    except sqlite3.Error as e:
-        conn.rollback()
-        response = 'Error processing investment: ' + str(e)
-    finally:
-        conn.close()
-        return response
+                return 'Insufficient funds'
+    except Exception as e:
+        print(f"Error during investment: {e}")
+        return f'Error during investment: {e}'
 
 
 def sell_stock(username, stock, amount):
-    # Connect to the database
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
 
-    # Get the current stock price from the stocks table
     c.execute("SELECT price FROM stocks WHERE stock=?", (stock,))
     result = c.fetchone()
     if result:
@@ -254,12 +221,10 @@ def sell_stock(username, stock, amount):
     else:
         return {"status": "failure", "message": "Invalid stock."}
 
-    # Check if the user has enough of the stock to sell
     c.execute(
         "SELECT quantity FROM investments WHERE username=? AND stock=?", (username, stock))
     result = c.fetchone()
     if result and result[0] >= amount:
-        # Update the investments table
         new_quantity = result[0] - amount
         if new_quantity > 0:
             c.execute("UPDATE investments SET quantity=? WHERE username=? AND stock=?",
@@ -268,7 +233,6 @@ def sell_stock(username, stock, amount):
             c.execute(
                 "DELETE FROM investments WHERE username=? AND stock=?", (username, stock))
 
-        # Update the user's balance
         total_gain = stock_price * amount
         c.execute("UPDATE users SET balance = balance + ? WHERE username=?",
                   (total_gain, username))
@@ -343,7 +307,7 @@ class StockScraper:
                     soup = BeautifulSoup(response.text, 'html.parser')
                     name, last_trade_time, last_price = self.parse_page(
                         soup, url)
-                    if name and last_price:  # Proceed only if both name and last price are found
+                    if name and last_price:
                         writer.writerow([name, last_trade_time, last_price])
                 except requests.exceptions.RequestException as err:
                     logging.error(f"Request error for {url}: {err}")
@@ -356,10 +320,8 @@ class StockScraper:
             last_trade_time = last_trade_time_element.text.replace(
                 "After Hours: Last | ", "") if last_trade_time_element else "N/A"
 
-            # Extracting just the numerical part of the last price
             last_price_full = soup.find(
                 class_='QuoteStrip-lastPriceStripContainer').text
-            # Using regex to extract the numerical price
             last_price = re.search(
                 r'[\d,]+\.\d+', last_price_full).group(0) if last_price_full else "N/A"
 

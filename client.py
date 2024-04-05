@@ -9,9 +9,20 @@ import matplotlib
 import pandas as pd
 matplotlib.use('TkAgg')
 
-# Server configuration
 HOST = '127.0.0.1'
 PORT = 8000
+
+
+class CenteredTkWindow:
+    def center_window(self):
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        x = int((screen_width - width) / 2)
+        y = int((screen_height - height) / 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
 
 
 def register_user(username, password):
@@ -45,14 +56,13 @@ class PlaceholderEntry(tk.Entry):
             self.insert(0, self.placeholder)
 
 
-class MainWindow(tk.Tk):
+class MainWindow(tk.Tk, CenteredTkWindow):
     def __init__(self):
-        super().__init__()
+        super(MainWindow, self).__init__()
         self.title("User Login")
         self.geometry("500x500")
         self.center_window()
 
-        # Create labels and entry fields for username and password
         username_label = tk.Label(self, text="Username:")
         username_label.pack()
         self.username_entry = PlaceholderEntry(self, "Enter your username")
@@ -64,24 +74,14 @@ class MainWindow(tk.Tk):
             self, "Enter your password", show="*")
         self.password_entry.pack()
 
-        # Create a login button
         login_button = tk.Button(self, text="Login", command=self.login)
         login_button.pack(pady=10)
 
-        # Create a register button
         register_button = tk.Button(
             self, text="Register", command=self.register)
         register_button.pack()
 
-        # Handle window close event
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
-
-    def center_window(self):
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        x_position = (screen_width // 2) - (500 // 2)
-        y_position = (screen_height // 2) - (500 // 2)
-        self.geometry(f"500x500+{x_position}+{y_position}")
 
     def login(self):
         username = self.username_entry.get()
@@ -105,14 +105,13 @@ class MainWindow(tk.Tk):
         self.quit()
 
 
-class RegisterWindow(tk.Toplevel):
+class RegisterWindow(tk.Toplevel, CenteredTkWindow):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Register")
         self.geometry("500x500")
         self.center_window()
 
-        # Create labels and entry fields for username and password
         username_label = tk.Label(self, text="Username:")
         username_label.pack()
         self.username_entry = PlaceholderEntry(self, "Enter your username")
@@ -124,23 +123,14 @@ class RegisterWindow(tk.Toplevel):
             self, "Enter your password", show="*")
         self.password_entry.pack()
 
-        # Create a register button
         register_button = tk.Button(
             self, text="Register", command=self.register_user)
         register_button.pack(pady=10)
-
-    def center_window(self):
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        x_position = (screen_width // 2) - (500 // 2)
-        y_position = (screen_height // 2) - (500 // 2)
-        self.geometry(f"500x500+{x_position}+{y_position}")
 
     def register_user(self):
         username = self.username_entry.get()
         password = self.password_entry.get()
 
-        # Validate username and password
         if not username or not password:
             messagebox.showerror(
                 "Error", "Please enter both username and password")
@@ -158,12 +148,10 @@ class RegisterWindow(tk.Toplevel):
 
         messagebox.showinfo("Registration Result", response)
         self.destroy()
-        self.master.deiconify()  # Show the main window again
-
-# Account window class
+        self.master.deiconify()
 
 
-class AccountWindow(tk.Toplevel):
+class AccountWindow(tk.Toplevel, CenteredTkWindow):
     def __init__(self, parent, username, client_id):
         super().__init__(parent)
         self.client_id = client_id
@@ -181,7 +169,8 @@ class AccountWindow(tk.Toplevel):
         self.balance_label = tk.Label(self)
         self.balance_label.pack(pady=10)
         self.balance_label.config(
-            text=f"Welcome to your account, {username}! Your current balance: £{self.portfolio['balance']}")
+            text=f"Welcome to your account, {username}! Your current balance: £{self.portfolio['balance']:.2f}"
+        )
 
         self.amount_entry = PlaceholderEntry(self, "Enter amount")
         self.amount_entry.pack(pady=10)
@@ -209,20 +198,17 @@ class AccountWindow(tk.Toplevel):
             amount = float(amount_str)
             if amount <= 0:
                 raise ValueError("Amount must be positive")
-            # Connect to the database
             conn = sqlite3.connect('users.db')
             c = conn.cursor()
-            # Update the user's balance
             c.execute(
                 "UPDATE users SET balance = balance + ? WHERE username = ?", (amount, self.username))
-            # Log the transaction
             c.execute(
                 "INSERT INTO transactions (username, transaction_type, amount) VALUES (?, 'deposit', ?)", (self.username, amount))
             conn.commit()
             conn.close()
             messagebox.showinfo(
                 "Deposit Successful", f"${amount} has been deposited to your balance.")
-            self.request_update_balance()  # Refresh balance display
+            self.request_update_balance()
         except ValueError as e:
             messagebox.showerror("Error", str(e))
 
@@ -232,26 +218,22 @@ class AccountWindow(tk.Toplevel):
             amount = float(amount_str)
             if amount <= 0:
                 raise ValueError("Amount must be positive")
-            # Connect to the database
             conn = sqlite3.connect('users.db')
             c = conn.cursor()
-            # Check if the balance is sufficient
             c.execute("SELECT balance FROM users WHERE username = ?",
                       (self.username,))
             balance = c.fetchone()[0]
             if balance < amount:
                 raise ValueError("Insufficient funds")
-            # Withdraw the amount
             c.execute(
                 "UPDATE users SET balance = balance - ? WHERE username = ?", (amount, self.username))
-            # Log the transaction
             c.execute(
                 "INSERT INTO transactions (username, transaction_type, amount) VALUES (?, 'withdraw', ?)", (self.username, amount))
             conn.commit()
             conn.close()
             messagebox.showinfo(
                 "Withdrawal Successful", f"${amount} has been withdrawn from your balance.")
-            self.request_update_balance()  # Refresh balance display
+            self.request_update_balance()
         except ValueError as e:
             messagebox.showerror("Error", str(e))
 
@@ -259,12 +241,11 @@ class AccountWindow(tk.Toplevel):
         """Updates the user's balance in the database and records the transaction."""
         conn = sqlite3.connect('users.db')
         c = conn.cursor()
-        # Update balance
         if amount_change > 0:
             transaction_type = 'deposit'
         else:
             transaction_type = 'withdraw'
-            amount_change = -amount_change  # Make the amount positive for storage
+            amount_change = -amount_change
         try:
             c.execute("UPDATE users SET balance = balance + ? WHERE username = ?",
                       (amount_change, self.username))
@@ -279,14 +260,7 @@ class AccountWindow(tk.Toplevel):
     def update_balance_display(self):
         """Updates the balance label with the latest balance."""
         self.balance_label.config(
-            text=f"Current Balance: ${self.portfolio['balance']}")
-
-    def center_window(self):
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        x_position = (screen_width // 2) - (600 // 2)
-        y_position = (screen_height // 2) - (600 // 2)
-        self.geometry(f"600x600+{x_position}+{y_position}")
+            text=f"Current Balance: ${self.portfolio['balance']:.2f}")
 
     def request_update_balance(self):
         request = f'get_balance|{self.username}'
@@ -295,21 +269,18 @@ class AccountWindow(tk.Toplevel):
             s.sendall(request.encode())
             response = s.recv(1024).decode()
             try:
-                # Attempt to convert the response to a float.
                 balance = float(response)
                 self.portfolio['balance'] = balance
                 self.update_balance_display()
             except ValueError:
-                # If the response cannot be converted to a float, log the error.
                 print("Error fetching balance:", response)
 
     def open_portfolio(self):
-        # Ensure to pass the client_id and the current balance to the PortfolioWindow
         PortfolioWindow(self, self.username, self.client_id,
                         self.portfolio['balance'])
 
 
-class PortfolioWindow(tk.Toplevel):
+class PortfolioWindow(tk.Toplevel, CenteredTkWindow):
     def __init__(self, parent, username, client_id, balance):
         super().__init__(parent)
         self.username = username
@@ -318,7 +289,7 @@ class PortfolioWindow(tk.Toplevel):
         self.investment_option = tk.StringVar(self)
         self.portfolio = {'balance': balance}
         self.title(f"{username}'s Portfolio")
-        self.geometry("800x600")
+        self.geometry("1400x650")
         self.center_window()
 
         self.market_files = {
@@ -335,7 +306,7 @@ class PortfolioWindow(tk.Toplevel):
         client_id_label.pack()
 
         self.balance_label = tk.Label(
-            self, text=f"Current Balance: ${self.balance}")
+            self, text=f"Current Balance: ${self.balance:.2f}")
         self.balance_label.pack(pady=10)
 
         main_frame = tk.Frame(self)
@@ -429,10 +400,9 @@ class PortfolioWindow(tk.Toplevel):
             selected_item = selected_items[0]
             item_values = self.tree.item(selected_item, 'values')
             market_name = item_values[0]
-            # Assuming price is in the 'Amount' column, adjust index as needed
             item_price = float(item_values[2].strip('$'))
             Investment(self, self.username, market_name,
-                       item_price)  # Pass price as well
+                       item_price)
         else:
             messagebox.showwarning(
                 "Selection Missing", "Please select a stock or cryptocurrency from the list.")
@@ -445,10 +415,10 @@ class PortfolioWindow(tk.Toplevel):
             market_name = row['Name']
             quantity = "1"
             if market_type == 'Stocks':
-                amount = f"${row['Last Price']}"
+                amount = f"${row['Last Price']:.2f}"
                 market_display_name = market_name
             elif market_type == 'Cryptocurrency':
-                amount = f"${row['Price']}"
+                amount = f"${row['Price']:.2f}"
                 market_display_name = market_name
 
             self.tree.insert('', 'end', values=(
@@ -506,18 +476,8 @@ class PortfolioWindow(tk.Toplevel):
         plt.tight_layout()
         self.canvas.draw()
 
-    def center_window(self):
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        window_width = 1400
-        window_height = 700
-        x_position = (screen_width // 2) - (window_width // 2)
-        y_position = (screen_height // 2) - (window_height // 2) - 45
-        self.geometry(
-            f"{window_width}x{window_height}+{x_position}+{y_position}")
 
-
-class Investment(tk.Toplevel):
+class Investment(tk.Toplevel, CenteredTkWindow):
     def __init__(self, parent, username, selected_market, item_price):  # Accept item_price
         super().__init__(parent)
         self.username = username
@@ -526,15 +486,15 @@ class Investment(tk.Toplevel):
         self.title("Investment")
         self.geometry("400x400")
         self.trade_option = tk.StringVar(value="Buy")
-        self.quantity_var = tk.IntVar(value=1)  # Default quantity is 1
+        self.quantity_var = tk.IntVar(value=1, name='quantity_var')
+        self.quantity_var.trace_add(
+            'write', self.update_investment_amount_callback)
         self.create_widgets()
         self.update_investment_amount()
+        self.center_window()
 
     def create_widgets(self):
         tk.Label(self, text=f"Invest in {self.selected_market}").pack(pady=10)
-
-        # self.investment_amount = tk.StringVar()
-        # tk.Entry(self, textvariable=self.investment_amount).pack(pady=10)
 
         self.investment_amount_var = tk.StringVar()
         tk.Label(self, text="Amount:").pack(pady=5)
@@ -546,18 +506,16 @@ class Investment(tk.Toplevel):
         trade_option_frame.pack(pady=5)
 
         tk.Label(self, text="Quantity:").pack(pady=5)
-        self.quantity_var = tk.IntVar(value=1)
-        self.quantity_entry = tk.Entry(
-            self, textvariable=self.quantity_var, width=5)
-        self.quantity_entry.pack(pady=5)
+        self.quantity_spinbox = tk.Spinbox(
+            self, from_=1, to=1000, width=5, textvariable=self.quantity_var)
+        self.quantity_spinbox.pack(pady=5)
 
-        quantity_adjust_frame = tk.Frame(self)
-        quantity_adjust_frame.pack(pady=5)
-
-        tk.Button(quantity_adjust_frame, text="↑", command=lambda: self.adjust_quantity(
-            1)).pack(side='left', padx=5)
-        tk.Button(quantity_adjust_frame, text="↓",
-                  command=lambda: self.adjust_quantity(-1)).pack(side='left', padx=5)
+        self.quantity_spinbox.bind(
+            '<KeyRelease>', lambda event: self.update_investment_amount())
+        self.quantity_spinbox.bind(
+            '<<Increment>>', lambda event: self.update_investment_amount())
+        self.quantity_spinbox.bind(
+            '<<Decrement>>', lambda event: self.update_investment_amount())
 
         tk.Radiobutton(trade_option_frame, text="Buy",
                        variable=self.trade_option, value="Buy").pack(side='left', padx=5)
@@ -566,31 +524,83 @@ class Investment(tk.Toplevel):
 
         tk.Button(self, text="Confirm",
                   command=self.confirm_investment).pack(pady=10)
-
         tk.Button(self, text="Cancel", command=self.destroy).pack(pady=10)
 
-    def increase_quantity(self):
-        self.quantity_var.set(self.quantity_var.get() + 1)
-
-    def decrease_quantity(self):
-        self.quantity_var.set(max(1, self.quantity_var.get() - 1))
-
-    def adjust_quantity(self, delta):
-        new_quantity = max(1, self.quantity_var.get() + delta)
-        self.quantity_var.set(new_quantity)
-        self.update_investment_amount()
-
-    def update_investment_amount(self):
+    def update_investment_amount(self, event=None):
         total_amount = self.item_price * self.quantity_var.get()
         self.investment_amount_var.set(f"{total_amount:.2f}")
 
+    def update_investment_amount_callback(self, *args):
+        self.update_investment_amount()
+
     def confirm_investment(self):
-        print(
-            f"Invested in {self.selected_market} with quantity {self.quantity_var.get()}")
+        transaction_type = self.trade_option.get()
+        username = self.username
+        selected_market = self.selected_market
+        quantity = self.quantity_var.get()
+        item_price = self.item_price
+
+        total_amount = item_price * quantity
+
+        conn = sqlite3.connect('users.db')
+        c = conn.cursor()
+
+        if transaction_type == "Buy":
+            c.execute("SELECT balance FROM users WHERE username=?", (username,))
+            balance = c.fetchone()[0]
+            if balance < total_amount:
+                messagebox.showerror("Error", "Insufficient funds")
+                return
+            else:
+                c.execute(
+                    "UPDATE users SET balance = balance - ? WHERE username=?", (total_amount, username))
+                c.execute("INSERT INTO transactions (username, transaction_type, amount, market) VALUES (?, ?, ?, ?)",
+                          (username, 'buy', total_amount, selected_market))
+                # Check if the user already owns part of the market
+                c.execute("SELECT quantity FROM portfolios WHERE username=? AND market=?",
+                          (username, selected_market))
+                row = c.fetchone()
+                if row:
+                    new_quantity = row[0] + quantity
+                    c.execute("UPDATE portfolios SET quantity=? WHERE username=? AND market=?",
+                              (new_quantity, username, selected_market))
+                else:
+                    c.execute("INSERT INTO portfolios (username, market, quantity, amount) VALUES (?, ?, ?, ?)",
+                              (username, selected_market, quantity, total_amount))
+        elif transaction_type == "Sell":
+            c.execute("SELECT quantity FROM portfolios WHERE username=? AND market=?",
+                      (username, selected_market))
+            row = c.fetchone()
+            if row and row[0] >= quantity:
+                c.execute(
+                    "UPDATE users SET balance = balance + ? WHERE username=?", (total_amount, username))
+                c.execute("INSERT INTO transactions (username, transaction_type, amount, market) VALUES (?, ?, ?, ?)",
+                          (username, 'sell', total_amount, selected_market))
+                new_quantity = row[0] - quantity
+                if new_quantity > 0:
+                    c.execute("UPDATE portfolios SET quantity=? WHERE username=? AND market=?",
+                              (new_quantity, username, selected_market))
+                else:
+                    c.execute(
+                        "DELETE FROM portfolios WHERE username=? AND market=?", (username, selected_market))
+            else:
+                messagebox.showerror(
+                    "Error", "You do not own enough of this item to sell")
+                conn.close()
+                return
+        else:
+            messagebox.showerror("Error", "Invalid transaction type")
+            conn.close()
+            return
+
+        conn.commit()
+        conn.close()
+        messagebox.showinfo(
+            "Transaction Complete", f"Your {transaction_type} transaction has been processed.")
         self.destroy()
 
 
-class MyInvestmentWindow(tk.Toplevel):
+class MyInvestmentWindow(tk.Toplevel, CenteredTkWindow):
     def __init__(self, parent, username):
         super().__init__(parent)
         self.username = username
@@ -598,6 +608,7 @@ class MyInvestmentWindow(tk.Toplevel):
         self.geometry("600x400")
         self.create_widgets()
         self.populate_investments()
+        self.center_window()
 
     def create_widgets(self):
         self.tree = ttk.Treeview(self, columns=(
@@ -606,6 +617,10 @@ class MyInvestmentWindow(tk.Toplevel):
         self.tree.heading('Quantity', text='Quantity')
         self.tree.heading('Amount', text='Amount')
         self.tree.pack(fill='both', expand=True)
+
+        self.tree.column('Market', anchor='center')
+        self.tree.column('Quantity', anchor='center')
+        self.tree.column('Amount', anchor='center')
 
     def populate_investments(self):
         conn = sqlite3.connect('users.db')
@@ -616,10 +631,11 @@ class MyInvestmentWindow(tk.Toplevel):
         conn.close()
 
         for market, quantity, amount in investments:
-            self.tree.insert('', 'end', values=(market, quantity, amount))
+            formatted_amount = f"${float(amount):.2f}"
+            self.tree.insert('', 'end', values=(
+                market, quantity, formatted_amount))
 
 
-# Run the application
 if __name__ == "__main__":
     app = MainWindow()
     app.mainloop()
