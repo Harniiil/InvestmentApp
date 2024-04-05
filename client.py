@@ -1,4 +1,3 @@
-import logging
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import socket
@@ -8,31 +7,11 @@ import sqlite3
 from tkinter import ttk
 import matplotlib
 import pandas as pd
-import re
-import threading
 matplotlib.use('TkAgg')
 
 # Server configuration
 HOST = '127.0.0.1'
 PORT = 8000
-
-# Custom Entry widget with placeholder
-
-
-def setup_database():
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (client_id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, balance REAL DEFAULT 0)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS transactions
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, transaction_type TEXT NOT NULL,
-                  amount REAL NOT NULL, market TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                  FOREIGN KEY (username) REFERENCES users(username))''')
-    conn.commit()
-    conn.close()
-
-
-setup_database()
 
 
 def register_user(username, password):
@@ -64,8 +43,6 @@ class PlaceholderEntry(tk.Entry):
     def set_placeholder(self, event):
         if not self.get():
             self.insert(0, self.placeholder)
-
-# Main window class
 
 
 class MainWindow(tk.Tk):
@@ -126,8 +103,6 @@ class MainWindow(tk.Tk):
 
     def on_closing(self):
         self.quit()
-
-# Register window class
 
 
 class RegisterWindow(tk.Toplevel):
@@ -393,7 +368,7 @@ class PortfolioWindow(tk.Toplevel):
         invest_frame.pack(pady=10)
 
         invest_button = tk.Button(
-            invest_frame, text="Invest", command=self.open_investment_window)
+            invest_frame, text="Invest", command=self.open_investment_window_with_selection)
         invest_button.pack(side='left', padx=10)
 
         self.investment_option = tk.StringVar(self)
@@ -447,6 +422,20 @@ class PortfolioWindow(tk.Toplevel):
 
     def open_my_investment_window(self):
         MyInvestmentWindow(self, self.username)
+
+    def open_investment_window_with_selection(self):
+        selected_items = self.tree.selection()
+        if selected_items:
+            selected_item = selected_items[0]
+            item_values = self.tree.item(selected_item, 'values')
+            market_name = item_values[0]
+            # Assuming price is in the 'Amount' column, adjust index as needed
+            item_price = float(item_values[2].strip('$'))
+            Investment(self, self.username, market_name,
+                       item_price)  # Pass price as well
+        else:
+            messagebox.showwarning(
+                "Selection Missing", "Please select a stock or cryptocurrency from the list.")
 
     def populate_treeview(self, dataframe, market_type):
         for item in self.tree.get_children():
@@ -529,25 +518,46 @@ class PortfolioWindow(tk.Toplevel):
 
 
 class Investment(tk.Toplevel):
-    def __init__(self, parent, username, investment_option):
+    def __init__(self, parent, username, selected_market, item_price):  # Accept item_price
         super().__init__(parent)
         self.username = username
-        self.investment_option = investment_option
+        self.selected_market = selected_market
+        self.item_price = item_price  # Store the price
         self.title("Investment")
-        self.geometry("400x300")
+        self.geometry("400x400")
         self.trade_option = tk.StringVar(value="Buy")
+        self.quantity_var = tk.IntVar(value=1)  # Default quantity is 1
         self.create_widgets()
+        self.update_investment_amount()
 
     def create_widgets(self):
-        tk.Label(self, text=f"Invest in {self.investment_option}").pack(
-            pady=10)
+        tk.Label(self, text=f"Invest in {self.selected_market}").pack(pady=10)
 
-        self.investment_amount = tk.StringVar()
-        tk.Entry(self, textvariable=self.investment_amount).pack(pady=10)
+        # self.investment_amount = tk.StringVar()
+        # tk.Entry(self, textvariable=self.investment_amount).pack(pady=10)
+
+        self.investment_amount_var = tk.StringVar()
+        tk.Label(self, text="Amount:").pack(pady=5)
+        tk.Entry(self, textvariable=self.investment_amount_var,
+                 state='readonly').pack(pady=5)
 
         tk.Label(self, text="Trade Option:").pack()
         trade_option_frame = tk.Frame(self)
         trade_option_frame.pack(pady=5)
+
+        tk.Label(self, text="Quantity:").pack(pady=5)
+        self.quantity_var = tk.IntVar(value=1)
+        self.quantity_entry = tk.Entry(
+            self, textvariable=self.quantity_var, width=5)
+        self.quantity_entry.pack(pady=5)
+
+        quantity_adjust_frame = tk.Frame(self)
+        quantity_adjust_frame.pack(pady=5)
+
+        tk.Button(quantity_adjust_frame, text="↑", command=lambda: self.adjust_quantity(
+            1)).pack(side='left', padx=5)
+        tk.Button(quantity_adjust_frame, text="↓",
+                  command=lambda: self.adjust_quantity(-1)).pack(side='left', padx=5)
 
         tk.Radiobutton(trade_option_frame, text="Buy",
                        variable=self.trade_option, value="Buy").pack(side='left', padx=5)
@@ -559,9 +569,24 @@ class Investment(tk.Toplevel):
 
         tk.Button(self, text="Cancel", command=self.destroy).pack(pady=10)
 
+    def increase_quantity(self):
+        self.quantity_var.set(self.quantity_var.get() + 1)
+
+    def decrease_quantity(self):
+        self.quantity_var.set(max(1, self.quantity_var.get() - 1))
+
+    def adjust_quantity(self, delta):
+        new_quantity = max(1, self.quantity_var.get() + delta)
+        self.quantity_var.set(new_quantity)
+        self.update_investment_amount()
+
+    def update_investment_amount(self):
+        total_amount = self.item_price * self.quantity_var.get()
+        self.investment_amount_var.set(f"{total_amount:.2f}")
+
     def confirm_investment(self):
         print(
-            f"Invested {self.investment_amount.get()} in {self.investment_option}")
+            f"Invested in {self.selected_market} with quantity {self.quantity_var.get()}")
         self.destroy()
 
 
