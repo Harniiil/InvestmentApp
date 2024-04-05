@@ -12,8 +12,6 @@ import re
 HOST = '127.0.0.1'
 PORT = 8000
 
-# Create the database and tables
-
 
 def create_database_and_tables():
     # Establish a connection to the database (or create it if it doesn't exist)
