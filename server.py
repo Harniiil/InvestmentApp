@@ -396,6 +396,6 @@ def start_server():
 
 """Main method to run the code"""
 if __name__ == '__main__':
-    update_stock_data()  # this process is lenghty to we are calling it first
+    update_stock_data()  # this process is lenghty so we are calling it first
     update_crypto_data()  # this method will run cryptoscraper
     start_server()  # this will start the server
