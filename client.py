@@ -1,3 +1,4 @@
+"""External Python Libraries"""
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import socket
@@ -9,11 +10,13 @@ import matplotlib
 import pandas as pd
 matplotlib.use('TkAgg')
 
+# Defining the Host and Port to make connection
 HOST = '127.0.0.1'
 PORT = 8000
 
 
 class CenteredTkWindow:
+    # Class to center all the screen window
     def center_window(self):
         self.update_idletasks()
         width = self.winfo_width()
@@ -25,22 +28,12 @@ class CenteredTkWindow:
         self.geometry(f'{width}x{height}+{x}+{y}')
 
 
-def register_user(username, password):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    try:
-        c.execute("INSERT INTO users (username, password) VALUES (?, ?)",
-                  (username, password))
-        conn.commit()
-        return 'Registration successful'
-    except sqlite3.IntegrityError:
-        return 'Username already exists'
-    finally:
-        conn.close()
-
-
 class PlaceholderEntry(tk.Entry):
+    # class for the placeholders
     def __init__(self, master, placeholder, *args, **kwargs):
+        # * args - to pass a variable number of arguments to a function
+        # **kwargs - to pass a keyworded, variable-length argument dictionary to a function
+        # initialization of the class
         super().__init__(master, *args, **kwargs)
         self.placeholder = placeholder
         self.insert(0, self.placeholder)
@@ -48,6 +41,7 @@ class PlaceholderEntry(tk.Entry):
         self.bind('<FocusOut>', self.set_placeholder)
 
     def clear_placeholder(self, event):
+        # to clear text when user clicks on input block
         if self.get() == self.placeholder:
             self.delete(0, tk.END)
 
@@ -57,12 +51,15 @@ class PlaceholderEntry(tk.Entry):
 
 
 class MainWindow(tk.Tk, CenteredTkWindow):
+    # class for main userinterface (GUI)
     def __init__(self):
+        # initialization of the class
         super(MainWindow, self).__init__()
-        self.title("User Login")
-        self.geometry("500x500")
-        self.center_window()
+        self.title("User Login")  # Title of the window
+        self.geometry("500x500")  # window size
+        self.center_window()  # calling center window
 
+        """ GUI components - Button, Input Block, Labels"""
         username_label = tk.Label(self, text="Username:")
         username_label.pack()
         self.username_entry = PlaceholderEntry(self, "Enter your username")
@@ -82,14 +79,16 @@ class MainWindow(tk.Tk, CenteredTkWindow):
         register_button.pack()
 
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        # exit code when user close window
 
     def login(self):
-        username = self.username_entry.get()
+        # perform this function when user tries to login
+        username = self.username_entry.get()  # Get user input
         password = self.password_entry.get()
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((HOST, PORT))
             request = f'login|{username}|{password}'
-            s.sendall(request.encode())
+            s.sendall(request.encode())  # S - TCP Socket - send data to server
             response = s.recv(1024).decode()
         if response.startswith('Login successful'):
             client_id = response.split(': ')[-1]  # Correctly extract client ID
@@ -102,16 +101,19 @@ class MainWindow(tk.Tk, CenteredTkWindow):
         RegisterWindow(self)
 
     def on_closing(self):
-        self.quit()
+        self.quit()  # after register this window will close it self
 
 
 class RegisterWindow(tk.Toplevel, CenteredTkWindow):
+    # Class for the registration process
     def __init__(self, parent):
+        # initialization of the class
         super().__init__(parent)
         self.title("Register")
         self.geometry("500x500")
         self.center_window()
 
+        """ GUI components - Button, Input Block, Labels"""
         username_label = tk.Label(self, text="Username:")
         username_label.pack()
         self.username_entry = PlaceholderEntry(self, "Enter your username")
@@ -128,6 +130,7 @@ class RegisterWindow(tk.Toplevel, CenteredTkWindow):
         register_button.pack(pady=10)
 
     def register_user(self):
+        # Function logic behind register process
         username = self.username_entry.get()
         password = self.password_entry.get()
 
@@ -141,6 +144,7 @@ class RegisterWindow(tk.Toplevel, CenteredTkWindow):
             return
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            # send data to server of newly register user
             s.connect((HOST, PORT))
             request = f'register|{username}|{password}'
             s.sendall(request.encode())
@@ -152,7 +156,9 @@ class RegisterWindow(tk.Toplevel, CenteredTkWindow):
 
 
 class AccountWindow(tk.Toplevel, CenteredTkWindow):
+    # Class for the Account Window
     def __init__(self, parent, username, client_id):
+        # initialization of the class
         super().__init__(parent)
         self.client_id = client_id
         self.username = username
@@ -160,7 +166,7 @@ class AccountWindow(tk.Toplevel, CenteredTkWindow):
         self.geometry("600x600")
         self.protocol("WM_DELETE_WINDOW", self.quit)
         self.center_window()
-
+        """ GUI components - Button, Input Block, Labels"""
         self.portfolio = {"balance": 500, "investments": {}}
 
         client_id_label = tk.Label(self, text=f"Client ID: {self.client_id}")
@@ -193,6 +199,7 @@ class AccountWindow(tk.Toplevel, CenteredTkWindow):
         self.request_update_balance()
 
     def deposit_money(self):
+        # Function to perfrom when user try to deposit money
         amount_str = self.amount_entry.get()
         try:
             amount = float(amount_str)
@@ -213,6 +220,7 @@ class AccountWindow(tk.Toplevel, CenteredTkWindow):
             messagebox.showerror("Error", str(e))
 
     def withdraw_money(self):
+        # Function to perform when user try to withdraw money
         amount_str = self.amount_entry.get()
         try:
             amount = float(amount_str)
@@ -263,6 +271,7 @@ class AccountWindow(tk.Toplevel, CenteredTkWindow):
             text=f"Current Balance: ${self.portfolio['balance']:.2f}")
 
     def request_update_balance(self):
+        # Fucntion to resquest balance from server side
         request = f'get_balance|{self.username}'
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((HOST, PORT))
@@ -281,7 +290,9 @@ class AccountWindow(tk.Toplevel, CenteredTkWindow):
 
 
 class PortfolioWindow(tk.Toplevel, CenteredTkWindow):
+    # Class for the Portfolio Window
     def __init__(self, parent, username, client_id, balance):
+        # initialization of the class
         super().__init__(parent)
         self.username = username
         self.client_id = client_id
@@ -302,11 +313,12 @@ class PortfolioWindow(tk.Toplevel, CenteredTkWindow):
         self.update_graph()
 
     def create_widgets(self):
+        """ GUI components - Button, Input Block, Labels"""
         client_id_label = tk.Label(self, text=f"Client ID: {self.client_id}")
         client_id_label.pack()
 
         self.balance_label = tk.Label(
-            self, text=f"Current Balance: ${self.balance:.2f}")
+            self, text=f"Current Balance: ${self.balance:.2f}")  # :.2f - 2 Decimal place
         self.balance_label.pack(pady=10)
 
         main_frame = tk.Frame(self)
@@ -382,11 +394,6 @@ class PortfolioWindow(tk.Toplevel, CenteredTkWindow):
         self.balance_label.configure(
             text=f"Current Balance: ${self.portfolio['balance']}")
 
-    def update_balance_display(self):
-        self.portfolio['balance'] = self.balance
-        self.balance_label.config(
-            text=f"Current Balance: ${self.portfolio['balance']}")
-
     def open_investment_window(self):
         selected_option = self.investment_option.get()
         Investment(self, self.username, selected_option)
@@ -394,7 +401,13 @@ class PortfolioWindow(tk.Toplevel, CenteredTkWindow):
     def open_my_investment_window(self):
         MyInvestmentWindow(self, self.username)
 
+    def refresh_investments(self):
+        self.populate_investments()
+        self.request_update_balance()
+        self.update_display()
+
     def open_investment_window_with_selection(self):
+        # Functoin for the selection of the stocks/Crypto
         selected_items = self.tree.selection()
         if selected_items:
             selected_item = selected_items[0]
@@ -408,6 +421,7 @@ class PortfolioWindow(tk.Toplevel, CenteredTkWindow):
                 "Selection Missing", "Please select a stock or cryptocurrency from the list.")
 
     def populate_treeview(self, dataframe, market_type):
+        """ GUI components - Trss, Labels"""
         for item in self.tree.get_children():
             self.tree.delete(item)
 
@@ -434,12 +448,14 @@ class PortfolioWindow(tk.Toplevel, CenteredTkWindow):
             print(f"Selected market '{selected_market}' not recognized.")
 
     def plot_stock_data(self):
+        """ GUI components - To plot stock graph"""
         try:
             stocks_df = pd.read_csv('stocks.csv')
             if not stocks_df.empty:
                 self.ax.clear()
-                self.ax.bar(stocks_df['Name'],
-                            stocks_df['Last Price'], color='skyblue')
+                # Use ax.plot for a line graph instead of ax.bar
+                self.ax.plot(stocks_df['Name'], stocks_df['Last Price'],
+                             color='skyblue', marker='o', linestyle='-', linewidth=2)
                 self.ax.set_title('Top 10 Stock Prices')
                 self.ax.set_xlabel('Stock')
                 self.ax.set_ylabel('Last Price')
@@ -453,6 +469,7 @@ class PortfolioWindow(tk.Toplevel, CenteredTkWindow):
             print(f"Error loading or plotting stock data: {e}")
 
     def plot_crypto_data(self):
+        """ GUI components - To plot crypto graph"""
         try:
             cryptos_df = pd.read_csv('cryptocurrencies.csv')
             if not cryptos_df.empty:
@@ -478,7 +495,8 @@ class PortfolioWindow(tk.Toplevel, CenteredTkWindow):
 
 
 class Investment(tk.Toplevel, CenteredTkWindow):
-    def __init__(self, parent, username, selected_market, item_price):  # Accept item_price
+    def __init__(self, parent, username, selected_market, item_price):
+        # initialization of the class
         super().__init__(parent)
         self.username = username
         self.selected_market = selected_market
@@ -494,6 +512,7 @@ class Investment(tk.Toplevel, CenteredTkWindow):
         self.center_window()
 
     def create_widgets(self):
+        """ GUI components - Button, Input Block, Labels"""
         tk.Label(self, text=f"Invest in {self.selected_market}").pack(pady=10)
 
         self.investment_amount_var = tk.StringVar()
@@ -534,6 +553,7 @@ class Investment(tk.Toplevel, CenteredTkWindow):
         self.update_investment_amount()
 
     def confirm_investment(self):
+        # Function to perfrom when user try to invest
         transaction_type = self.trade_option.get()
         username = self.username
         selected_market = self.selected_market
@@ -601,6 +621,7 @@ class Investment(tk.Toplevel, CenteredTkWindow):
 
 
 class MyInvestmentWindow(tk.Toplevel, CenteredTkWindow):
+    # initialization of the class
     def __init__(self, parent, username):
         super().__init__(parent)
         self.username = username
@@ -611,6 +632,7 @@ class MyInvestmentWindow(tk.Toplevel, CenteredTkWindow):
         self.center_window()
 
     def create_widgets(self):
+        """ GUI components - Button, Input Block, Labels"""
         self.tree = ttk.Treeview(self, columns=(
             'Market', 'Quantity', 'Amount'), show='headings')
         self.tree.heading('Market', text='Market')
